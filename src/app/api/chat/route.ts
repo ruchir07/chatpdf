@@ -50,8 +50,9 @@ ${context}
 **END CONTEXT BLOCK**
 
 You must:
+- Use only the information from the above **context block** to answer the user's question.
 - If the answer is **not present in the context**, respond with:  
-  ❝ *I'm Gay* ❞
+  ❝ *I'm sorry, but I don't know the answer to that question.* ❞
 - Do **not** use outside knowledge or make assumptions.
 
 ---
