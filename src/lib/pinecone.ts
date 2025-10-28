@@ -10,8 +10,13 @@ let pinecone: Pinecone | null = null;
 
 export const getPineconeClient = async() => {
     if(!pinecone){
-        pinecone = new Pinecone();
-        
+        const apiKey = process.env.PINECONE_API_KEY;
+        if (!apiKey) {
+            throw new Error("PINECONE_API_KEY is not set");
+        }
+        pinecone = new Pinecone({
+            apiKey: apiKey
+        });
     }
     return pinecone;
 }

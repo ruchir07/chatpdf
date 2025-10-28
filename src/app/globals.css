@@ -120,3 +120,47 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Typing animation for streaming messages */
+@keyframes typing {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.typing-animation {
+  position: relative;
+}
+
+.typing-animation::after {
+  content: '▋';
+  animation: blink 1s infinite;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Smooth scrollbar styling */
+#message-container {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+#message-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+#message-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+#message-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+#message-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

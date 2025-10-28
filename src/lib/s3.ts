@@ -3,6 +3,17 @@ import { Key } from 'lucide-react'
 
 export async function uploadS3(file: File){
     try{
+        // Validate environment variables
+        if (!process.env.NEXT_PUBLIC_S3_BUCKET_NAME) {
+            throw new Error('NEXT_PUBLIC_S3_BUCKET_NAME is not configured in environment variables');
+        }
+        if (!process.env.NEXT_PUBLIC_S3_ACCESS_KEY_ID) {
+            throw new Error('NEXT_PUBLIC_S3_ACCESS_KEY_ID is not configured in environment variables');
+        }
+        if (!process.env.NEXT_PUBLIC_S3_SECRET_ACCESS_KEY) {
+            throw new Error('NEXT_PUBLIC_S3_SECRET_ACCESS_KEY is not configured in environment variables');
+        }
+
         AWS.config.update({
             accessKeyId: process.env.NEXT_PUBLIC_S3_ACCESS_KEY_ID,
             secretAccessKey: process.env.NEXT_PUBLIC_S3_SECRET_ACCESS_KEY,
@@ -17,7 +28,7 @@ export async function uploadS3(file: File){
         const file_key = 'uploads/' + Date.now().toString() + file.name.replace(' ','-');
 
         const params = {
-            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET_NAME!,
+            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET_NAME,
             Key: file_key,
             Body: file
         }
@@ -38,6 +49,7 @@ export async function uploadS3(file: File){
     }
     catch(err){
         console.error(err);
+        throw err; // Re-throw so the error can be caught by the caller
     }
 }
 

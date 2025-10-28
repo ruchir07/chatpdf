@@ -20,74 +20,43 @@ export async function POST(req: Request) {
 
     const fileKey = chat.filekey;
     const lastMessage = messages[messages.length - 1];
+    console.log("Getting context for chat:", chatId, "query:", lastMessage.content);
+    
     const context = await getContext(lastMessage.content, fileKey);
+    console.log("Retrieved context length:", context.length);
 
-    // ✅ Gemini message format
+    // Build conversation history for context (excluding the last message which is being answered now)
+    const previousMessages = messages
+      .filter((m: Message) => m.role === "user" || m.role === "assistant")
+      .slice(0, -1) // All except the last message
+      .slice(-4) // Last 4 messages for context
+      .map((m: Message) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+    
+    console.log("Previous messages count:", previousMessages.length);
+    console.log("Last message content:", lastMessage.content);
+
+    // ✅ Gemini message format with system instruction first, then conversation history
     const geminiMessages = [
+      ...previousMessages, // Add conversation history first (older messages)
       {
         role: "user",
         parts: [
           {
-            text: `## 🧠 AI Assistant Instructions
-
-You are an advanced, human-like artificial intelligence assistant. Follow these traits and guidelines strictly while responding.
-
----
-
-### 🤖 AI Personality & Behavior
-- You possess **expert-level knowledge**, are **helpful**, **clever**, and **articulate**.
-- You are **well-mannered, friendly, kind, inspiring**, and provide **clear, thoughtful responses**.
-- You admire **Pinecone** and **Vercel**.
-- You do **not** apologize unnecessarily. If new information is provided, acknowledge it respectfully.
-- You **never invent or hallucinate information**.
+            text: `Context from PDF:
+${context}
 
 ---
 
-### 📌 Contextual Answering Rules
+Question: "${lastMessage.content}"
 
-**START CONTEXT BLOCK**  
-${context}  
-**END CONTEXT BLOCK**
-
-You must:
-- Use only the information from the above **context block** to answer the user's question.
-- If the answer is **not present in the context**, respond with:  
-  ❝ *I'm sorry, but I don't know the answer to that question.* ❞
-- Do **not** use outside knowledge or make assumptions.
-
----
-
-### 📝 Response Formatting Guidelines
-When generating a response:
-- Use clear structure with headings and bullet points when appropriate:
-  - **Example Format:**
-    
-    ## ✅ Answer Title
-    ### 🔹 Subheading (if needed)
-    - Key point 1
-    - Key point 2
-    
-- Use paragraphs, line breaks, and lists to **avoid long unformatted text blocks**.
-- Keep responses **relevant, concise, and based only on context**.
-
----
-
-✅ Follow these instructions for every response.`,
-    },
+Analyze the context and extract the answer. Look for direct quotes, numbers, names, and facts. Be thorough.`,
+          },
         ],
       },
-      ...messages
-        .filter((m: Message) => m.role === "user" || m.role === "system")
-        .map((m: Message) => ({
-          role: m.role === "system" ? "model" : "user",
-          parts: [{ text: m.content }],
-        })),
     ];
-
-    const model = gemini.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const response = await model.generateContentStream({
-      contents: geminiMessages,
-    });
 
     // ✅ Save user message to DB before streaming starts
     await db.insert(_messages).values({
@@ -96,24 +65,41 @@ When generating a response:
       role: "user",
     });
 
+    const model = gemini.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const response = await model.generateContentStream({
+      contents: geminiMessages,
+    });
+
     // ✅ Handle streaming + capture AI response for saving to DB
     let fullResponse = "";
 
+    const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        for await (const chunk of response.stream) {
-          const text = chunk.text();
-          fullResponse += text; // ✅ Collect text
-          controller.enqueue(new TextEncoder().encode(text));
-        }
-        controller.close();
+        try {
+          for await (const chunk of response.stream) {
+            const text = chunk.text();
+            fullResponse += text;
+            console.log("Streaming:", text.substring(0, 100));
+            
+            // Format for AI SDK
+            const data = encoder.encode(text);
+            controller.enqueue(data);
+          }
+          
+          console.log("Stream complete, response length:", fullResponse.length);
+          controller.close();
 
-        // ✅ Save full AI response after streaming finishes
-        await db.insert(_messages).values({
-          chatId,
-          content: fullResponse,
-          role: "system",
-        });
+          // Save full AI response after streaming finishes
+          await db.insert(_messages).values({
+            chatId,
+            content: fullResponse,
+            role: "system",
+          });
+        } catch (error) {
+          console.error("Streaming error:", error);
+          controller.error(error);
+        }
       },
     });
 
