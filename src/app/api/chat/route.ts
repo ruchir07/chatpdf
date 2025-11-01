@@ -39,24 +39,66 @@ export async function POST(req: Request) {
     console.log("Last message content:", lastMessage.content);
 
     // ✅ Gemini message format with system instruction first, then conversation history
-    const geminiMessages = [
-      ...previousMessages, // Add conversation history first (older messages)
+//     const geminiMessages = [
+//       ...previousMessages, // Add conversation history first (older messages)
+//       {
+//         role: "user",
+//         parts: [
+//           {
+//             text: `Context from PDF:
+// ${context}
+
+// ---
+
+// Question: "${lastMessage.content}"
+
+// Analyze the context and extract the answer. Look for direct quotes, numbers, names, and facts. Be thorough.`,
+//           },
+//         ],
+//       },
+//     ];
+const geminiMessages = [
+  ...previousMessages, // Keep conversation history for continuity
+  {
+    role: "user",
+    parts: [
       {
-        role: "user",
-        parts: [
-          {
-            text: `Context from PDF:
+        text: `You are an intelligent document question-answering system specialized in understanding complex PDFs.
+
+Follow these strict instructions carefully:
+
+1. First, analyze the **entire document context semantically** — do not rely only on exact keyword matches.
+   - You must consider near and far relationships between ideas, concepts, and terminology.
+   - For example, if a question relates to something conceptually described (even if phrased differently), it is considered *in-context*.
+2. If the question is **completely unrelated** to the document (no direct or conceptual relation), reply shortly with:
+   "There is no mention of such things in the given document."
+3. If the question is **partially related**, extract and provide only the relevant portion of the document’s context — do not fabricate or infer beyond it.
+4. If the question is **clearly within context**, provide a **precise, factual, and well-structured** answer based strictly on the document.
+5. In every answer that has some context, you must also include:
+   - The **page number(s)** where the relevant information appears in the document.
+   - Use the format: (Found on page X) or (Relevant details on pages X–Y).
+6. Never use information or assumptions not found or implied in the document.
+7. Keep out-of-context answers short. In-context answers should be informative but concise.
+
+---
+
+Document Context:
 ${context}
 
 ---
 
 Question: "${lastMessage.content}"
 
-Analyze the context and extract the answer. Look for direct quotes, numbers, names, and facts. Be thorough.`,
-          },
-        ],
+Now:
+1. Determine if the question is in-context (full or partial) or out-of-context.
+2. Respond according to the above rules.
+3. If relevant, mention the corresponding page numbers.`,
       },
-    ];
+    ],
+  },
+];
+
+
 
     // ✅ Save user message to DB before streaming starts
     await db.insert(_messages).values({
