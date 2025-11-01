@@ -47,7 +47,7 @@ const ChatSideBar = ({chats,chatId}: Props) => {
             <div className='flex items-center gap-3 text-sm text-slate-500'>
                 <Link href='/' className='hover:text-white transition-colors'>Home</Link>
                 <span>|</span>
-                <Link href='https://github.com' className='hover:text-white transition-colors'>Source</Link>
+                <Link href='https://https://github.com/ruchir07/chatpdf/tree/temp' className='hover:text-white transition-colors'>Source</Link>
             </div>
         </div>
     </div>
