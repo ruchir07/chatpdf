@@ -3,9 +3,7 @@ import ChatSideBar from '@/components/ChatSideBar';
 import PDFViewer from '@/components/PDFViewer';
 import { db } from '@/lib/db';
 import { chats } from '@/lib/db/schema';
-import { getS3Url } from '@/lib/s3';
 import { auth } from '@clerk/nextjs/server';
-import { chat } from '@pinecone-database/pinecone/dist/assistant/data/chat';
 import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -15,8 +13,8 @@ type Props = {
   params: { chatId: string };
 };
 
-export default async function ChatPage({ params }: Props) {
-  const { chatId } = params;
+export default async function ChatPage({ params }: { params: Promise<{ chatId: string }> }) {
+  const { chatId } = await params;
   const { userId } = await auth();
 
   if (!userId) {
