@@ -1,27 +1,15 @@
-import { pipeline } from '@xenova/transformers';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-let embedder: any = null;
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const model = genAI.getGenerativeModel({model: "text-embedding-004"})
 
-// Load the embedding model only once
-async function loadModel() {
-  if (!embedder) {
-    embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-  }
-  return embedder;
-}
 
 export async function getEmbeddings(text: string): Promise<number[]> {
   try {
-    const model = await loadModel();
-
-    const embeddings = await model(text.replace(/\n/g, ' '), {
-      pooling: 'mean',        // average all token embeddings
-      normalize: true         // recommended for vector DB like Pinecone
-    });
-
-    return Array.from(embeddings.data); // return as number[]
+    const result = await model.embedContent(text);
+    return result.embedding.values; // Already float[] vector
   } catch (err) {
-    console.error('Error generating embeddings:', err);
+    console.error("Gemini Embedding Error:", err);
     throw err;
   }
-}
+};
