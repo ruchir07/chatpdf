@@ -65,7 +65,7 @@ async function embedDocument(doc: Document){
         } as PineconeRecord;
     }
     catch(err){
-        console.log("Error embedding documents",err);
+        console.error("Error embedding documents",err);
         throw err;
     }
 }

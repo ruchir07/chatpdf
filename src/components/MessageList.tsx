@@ -67,10 +67,38 @@ const MessageList = ({messages,isLoading,isStreaming}: Props) => {
                             'opacity-80': isStreamingMessage
                         })
                     }>
-                        <div className={cn({
+                        <div className={cn('prose-sm md:prose-base', {
                           'typing-animation': isStreamingMessage && isAssistant
                         })}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: ({node, ...props}: any) => <h1 className="text-2xl font-bold mt-4 mb-2" {...props} />,
+                              h2: ({node, ...props}: any) => <h2 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                              h3: ({node, ...props}: any) => <h3 className="text-lg font-semibold mt-3 mb-2" {...props} />,
+                              p: ({node, ...props}: any) => <p className="mb-3 leading-relaxed last:mb-0" {...props} />,
+                              ul: ({node, ...props}: any) => <ul className="list-disc pl-6 mb-3 space-y-2" {...props} />,
+                              ol: ({node, ...props}: any) => <ol className="list-decimal pl-6 mb-3 space-y-2" {...props} />,
+                              li: ({node, ...props}: any) => <li className="pl-1" {...props} />,
+                              strong: ({node, ...props}: any) => <strong className="font-bold" {...props} />,
+                              em: ({node, ...props}: any) => <em className="italic opacity-90" {...props} />,
+                              blockquote: ({node, ...props}: any) => <blockquote className="border-l-4 border-current pl-4 py-1 italic opacity-80 my-2" {...props} />,
+                              code: ({node, className, children, ...props}: any) => {
+                                const match = /language-(\w+)/.exec(className || '')
+                                return match ? (
+                                  <pre className="bg-gray-800 text-gray-100 rounded-md p-3 my-3 overflow-x-auto text-sm font-mono">
+                                    <code className={className} {...props}>
+                                      {children}
+                                    </code>
+                                  </pre>
+                                ) : (
+                                  <code className="bg-black/10 rounded px-1.5 py-0.5 text-sm font-mono" {...props}>
+                                    {children}
+                                  </code>
+                                )
+                              }
+                            }}
+                          >
                               {message.content}
                           </ReactMarkdown>
                         </div>

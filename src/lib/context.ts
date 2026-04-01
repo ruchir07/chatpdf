@@ -29,7 +29,7 @@ export async function getMatchesFromEmbeddings(embeddings:number[],fileKey: stri
         return queryResult.matches || []
     }
     catch(error){
-        console.log("Error querying embeddings",error);
+        console.error("Error querying embeddings",error);
         throw error;
     }
 }

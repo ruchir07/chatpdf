@@ -30,9 +30,9 @@ const ChatComponent = ({chatId}: Props) => {
     streamProtocol: 'text'
    });
    
-   // Debug: Log messages to console
+   // Debug: Log messages removed
    React.useEffect(() => {
-       console.log('Messages updated:', messages);
+       // Component messages observed
    }, [messages]);
 
    React.useEffect(() => {

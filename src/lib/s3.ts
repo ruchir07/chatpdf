@@ -1,59 +1,38 @@
-import AWS from 'aws-sdk'
-import { Key } from 'lucide-react'
+import axios from 'axios';
 
-export async function uploadS3(file: File){
-    try{
-        // Validate environment variables
-        if (!process.env.NEXT_PUBLIC_S3_BUCKET_NAME) {
-            throw new Error('NEXT_PUBLIC_S3_BUCKET_NAME is not configured in environment variables');
-        }
-        if (!process.env.NEXT_PUBLIC_S3_ACCESS_KEY_ID) {
-            throw new Error('NEXT_PUBLIC_S3_ACCESS_KEY_ID is not configured in environment variables');
-        }
-        if (!process.env.NEXT_PUBLIC_S3_SECRET_ACCESS_KEY) {
-            throw new Error('NEXT_PUBLIC_S3_SECRET_ACCESS_KEY is not configured in environment variables');
-        }
-
-        AWS.config.update({
-            accessKeyId: process.env.NEXT_PUBLIC_S3_ACCESS_KEY_ID,
-            secretAccessKey: process.env.NEXT_PUBLIC_S3_SECRET_ACCESS_KEY,
-        })
-        const s3 = new AWS.S3({
-            params: {
-                Bucket: process.env.NEXT_PUBLIC_S3_BUCKET_NAME,
-            },
-            region: 'eu-north-1'
-        })
-
-        const file_key = 'uploads/' + Date.now().toString() + file.name.replace(' ','-');
-
-        const params = {
-            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET_NAME,
-            Key: file_key,
-            Body: file
-        }
-
-        const upload = s3.putObject(params).on('httpUploadProgress',evt => {
-            console.log("Uploading to S3...", parseInt(((evt.loaded*100)/evt.total).toString())) + '%'
-        }).promise();
-
-        await upload.then(data => {
-            console.log("Successfully uploaded to S3!",file_key);
+export async function uploadS3(file: File) {
+    try {
+        // Ask the backend for a secure presigned S3 url
+        const response = await axios.post('/api/s3-presigned-url', {
+            file_name: file.name,
+            file_type: file.type
         });
 
-        return Promise.resolve({
+        const { uploadUrl, file_key } = response.data;
+
+        // Use axios to perform the PUT request to the pre-signed URL directly
+        const upload = axios.put(uploadUrl, file, {
+            headers: {
+                'Content-Type': file.type,
+            },
+            onUploadProgress: (progressEvent) => {
+                // Upload progress can be tracked here if needed
+            }
+        });
+
+        await upload;
+
+        return {
             file_key,
             file_name: file.name
-        });
-
-    }
-    catch(err){
+        };
+    } catch (err) {
         console.error(err);
-        throw err; // Re-throw so the error can be caught by the caller
+        throw err;
     }
 }
 
-export function getS3Url(file_key: string){
+export function getS3Url(file_key: string) {
     const url = `https://${process.env.NEXT_PUBLIC_S3_BUCKET_NAME}.s3.eu-north-1.amazonaws.com/${file_key}`
     return url;
-}
+}

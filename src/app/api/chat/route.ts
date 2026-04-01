@@ -20,10 +20,8 @@ export async function POST(req: Request) {
 
     const fileKey = chat.filekey;
     const lastMessage = messages[messages.length - 1];
-    console.log("Getting context for chat:", chatId, "query:", lastMessage.content);
     
     const context = await getContext(lastMessage.content, fileKey);
-    console.log("Retrieved context length:", context.length);
 
     // Build conversation history for context (excluding the last message which is being answered now)
     const previousMessages = messages
@@ -34,10 +32,6 @@ export async function POST(req: Request) {
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
       }));
-    
-    console.log("Previous messages count:", previousMessages.length);
-    console.log("Last message content:", lastMessage.content);
-
     // ✅ Gemini message format with system instruction first, then conversation history
 //     const geminiMessages = [
 //       ...previousMessages, // Add conversation history first (older messages)
@@ -122,14 +116,11 @@ Now:
           for await (const chunk of response.stream) {
             const text = chunk.text();
             fullResponse += text;
-            console.log("Streaming:", text.substring(0, 100));
             
             // Format for AI SDK
             const data = encoder.encode(text);
             controller.enqueue(data);
           }
-          
-          console.log("Stream complete, response length:", fullResponse.length);
           controller.close();
 
           // Save full AI response after streaming finishes
