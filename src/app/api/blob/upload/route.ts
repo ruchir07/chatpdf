@@ -12,6 +12,15 @@ export async function POST(request: Request) {
             return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        // Explicit token check — surfaces missing env var immediately
+        if (!process.env.BLOB_READ_WRITE_TOKEN) {
+            console.error("BLOB_READ_WRITE_TOKEN is not set");
+            return Response.json(
+                { error: "Server misconfiguration: BLOB_READ_WRITE_TOKEN missing" },
+                { status: 500 }
+            );
+        }
+
         const formData = await request.formData();
         const file = formData.get("file") as File | null;
 
@@ -46,7 +55,8 @@ export async function POST(request: Request) {
             file_name: file.name,
         });
     } catch (error) {
-        console.error("Blob upload error:", error);
-        return Response.json({ error: "Upload failed" }, { status: 500 });
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("Blob upload error:", message, error);
+        return Response.json({ error: message }, { status: 500 });
     }
 }
