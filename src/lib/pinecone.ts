@@ -1,5 +1,5 @@
 import { Pinecone,type PineconeRecord } from "@pinecone-database/pinecone"
-import { downloadFromS3 } from "./s3-server";
+import { downloadFromBlob } from "./blob-server";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import {Document,RecursiveCharacterTextSplitter} from "@pinecone-database/doc-splitter"
 import md5 from "md5";
@@ -28,11 +28,11 @@ type PDFPage = {
     }
 }
 
-export async function loadS3IntoPinecone(fileKey: string){
+export async function loadBlobIntoPinecone(blobUrl: string){
 
-    const file_name = await downloadFromS3(fileKey);
+    const file_name = await downloadFromBlob(blobUrl);
     if(!file_name){
-        throw new Error('could not download from s3');
+        throw new Error('could not download from Vercel Blob');
     }
     const loader = new PDFLoader(file_name);
     const pages = (await loader.load()) as PDFPage[];
@@ -44,7 +44,9 @@ export async function loadS3IntoPinecone(fileKey: string){
     const client = await getPineconeClient();
     const pineconeIndex = client.Index('chatpdf');
 
-    const namespace = pineconeIndex.namespace(convertToAscii(fileKey));
+    // Derive a stable namespace key from the blob URL pathname
+    const namespaceKey = new URL(blobUrl).pathname.replace(/^\//, "");
+    const namespace = pineconeIndex.namespace(convertToAscii(namespaceKey));
     await namespace.upsert(vectors);
     return documents[0];
 

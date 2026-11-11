@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import { chats } from "@/lib/db/schema";
-import { loadS3IntoPinecone } from "@/lib/pinecone";
-import { getS3Url } from "@/lib/s3";
+import { loadBlobIntoPinecone } from "@/lib/pinecone";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
@@ -16,16 +15,19 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { file_key, file_name } = body;
+    // blob_url: full Vercel Blob public URL
+    // file_key: pathname (used as a unique key for Pinecone namespace)
+    // file_name: original file name
+    const { blob_url, file_key, file_name } = body;
 
-    await loadS3IntoPinecone(file_key);
+    await loadBlobIntoPinecone(blob_url);
 
     const chat = await db
       .insert(chats)
       .values({
         filekey: file_key,
         pdfName: file_name,
-        pdfUrl: getS3Url(file_key),
+        pdfUrl: blob_url,
         userId,
       })
       .returning({ insertedId: chats.id });
