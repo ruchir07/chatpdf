@@ -53,9 +53,13 @@ const FileUpload = () => {
             toast.success("Chat created!");
             router.push(`/chat/${chat_id}`);
           },
-          onError: (err) => {
-            toast.error("Error creating chat");
-            console.error(err);
+          onError: (err: any) => {
+            const errorMsg =
+              err?.response?.data?.error ||
+              err?.message ||
+              "Error creating chat";
+            toast.error(errorMsg);
+            console.error("Chat creation error:", err);
           },
         });
       } catch (error) {

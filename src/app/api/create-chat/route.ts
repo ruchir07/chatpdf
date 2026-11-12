@@ -20,12 +20,19 @@ export async function POST(req: Request) {
     // file_name: original file name
     const { blob_url, file_key, file_name } = body;
 
+    if (!blob_url || !file_name) {
+      return NextResponse.json(
+        { error: "Missing blob_url or file_name" },
+        { status: 400 }
+      );
+    }
+
     await loadBlobIntoPinecone(blob_url);
 
     const chat = await db
       .insert(chats)
       .values({
-        filekey: file_key,
+        filekey: file_key || blob_url,
         pdfName: file_name,
         pdfUrl: blob_url,
         userId,
@@ -37,9 +44,10 @@ export async function POST(req: Request) {
       { status: 200 }
     );
   } catch (err) {
-    console.error(err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Error in create-chat route:", message, err);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: message },
       { status: 500 }
     );
   }
