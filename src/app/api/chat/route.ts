@@ -1,18 +1,17 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Message, StreamingTextResponse } from "ai";
+import OpenAI from "openai";
+import { Message, OpenAIStream, StreamingTextResponse } from "ai";
 import { getContext } from "@/lib/context";
 import { db } from "@/lib/db";
 import { chats, messages as _messages } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
 export async function POST(req: Request) {
   try {
     const { messages, chatId } = await req.json();
 
-    // ✅ Validate chat
+    // 1. Validate chat
     const [chat] = await db.select().from(chats).where(eq(chats.id, chatId));
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
@@ -21,43 +20,17 @@ export async function POST(req: Request) {
     const fileKey = chat.filekey;
     const lastMessage = messages[messages.length - 1];
     
+    // 2. Fetch semantic context from Pinecone using embeddings
     const context = await getContext(lastMessage.content, fileKey);
 
-    // Build conversation history for context (excluding the last message which is being answered now)
-    const previousMessages = messages
-      .filter((m: Message) => m.role === "user" || m.role === "assistant")
-      .slice(0, -1) // All except the last message
-      .slice(-4) // Last 4 messages for context
-      .map((m: Message) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      }));
-    // ✅ Gemini message format with system instruction first, then conversation history
-//     const geminiMessages = [
-//       ...previousMessages, // Add conversation history first (older messages)
-//       {
-//         role: "user",
-//         parts: [
-//           {
-//             text: `Context from PDF:
-// ${context}
+    // 3. Save user message to DB before streaming starts
+    await db.insert(_messages).values({
+      chatId,
+      content: lastMessage.content,
+      role: "user",
+    });
 
-// ---
-
-// Question: "${lastMessage.content}"
-
-// Analyze the context and extract the answer. Look for direct quotes, numbers, names, and facts. Be thorough.`,
-//           },
-//         ],
-//       },
-//     ];
-const geminiMessages = [
-  ...previousMessages, // Keep conversation history for continuity
-  {
-    role: "user",
-    parts: [
-      {
-        text: `You are an intelligent document question-answering system specialized in understanding complex PDFs.
+    const systemPrompt = `You are an intelligent document question-answering system specialized in understanding complex PDFs.
 
 Follow these strict instructions carefully:
 
@@ -77,7 +50,90 @@ Follow these strict instructions carefully:
 ---
 
 Document Context:
-${context}
+${context}`;
+
+    // PATH A: Use OpenRouter if OPENROUTER_API_KEY is configured
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
+    if (openrouterKey) {
+      const openai = new OpenAI({
+        apiKey: openrouterKey,
+        baseURL: "https://openrouter.ai/api/v1",
+        defaultHeaders: {
+          "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://chatpdf.vercel.app",
+          "X-Title": "ChatPDF",
+        },
+      });
+
+      const conversationHistory = messages
+        .filter((m: Message) => m.role === "user" || m.role === "assistant" || m.role === "system")
+        .slice(0, -1)
+        .slice(-6)
+        .map((m: Message) => ({
+          role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+          content: m.content,
+        }));
+
+      const openAiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        ...conversationHistory,
+        {
+          role: "user",
+          content: lastMessage.content,
+        },
+      ];
+
+      const response = await openai.chat.completions.create({
+        model: "google/gemini-2.5-flash",
+        stream: true,
+        messages: openAiMessages,
+      });
+
+      const stream = OpenAIStream(response, {
+        async onCompletion(completion) {
+          try {
+            await db.insert(_messages).values({
+              chatId,
+              content: completion,
+              role: "system",
+            });
+          } catch (dbErr) {
+            console.error("Failed to save assistant message to DB:", dbErr);
+          }
+        },
+      });
+
+      return new StreamingTextResponse(stream);
+    }
+
+    // PATH B: Fallback to direct Google Gemini API if OPENROUTER_API_KEY is not set
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!geminiKey) {
+      return NextResponse.json(
+        { error: "No AI API key found. Please configure OPENROUTER_API_KEY or GEMINI_API_KEY." },
+        { status: 500 }
+      );
+    }
+
+    const gemini = new GoogleGenerativeAI(geminiKey);
+    const previousMessages = messages
+      .filter((m: Message) => m.role === "user" || m.role === "assistant")
+      .slice(0, -1)
+      .slice(-4)
+      .map((m: Message) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+
+    const geminiMessages = [
+      ...previousMessages,
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${systemPrompt}
 
 ---
 
@@ -87,28 +143,17 @@ Now:
 1. Determine if the question is in-context (full or partial) or out-of-context.
 2. Respond according to the above rules.
 3. If relevant, mention the corresponding page numbers.`,
+          },
+        ],
       },
-    ],
-  },
-];
-
-
-
-    // ✅ Save user message to DB before streaming starts
-    await db.insert(_messages).values({
-      chatId,
-      content: lastMessage.content,
-      role: "user",
-    });
+    ];
 
     const model = gemini.getGenerativeModel({ model: "gemini-2.5-flash" });
     const response = await model.generateContentStream({
       contents: geminiMessages,
     });
 
-    // ✅ Handle streaming + capture AI response for saving to DB
     let fullResponse = "";
-
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -116,14 +161,11 @@ Now:
           for await (const chunk of response.stream) {
             const text = chunk.text();
             fullResponse += text;
-            
-            // Format for AI SDK
             const data = encoder.encode(text);
             controller.enqueue(data);
           }
           controller.close();
 
-          // Save full AI response after streaming finishes
           await db.insert(_messages).values({
             chatId,
             content: fullResponse,
@@ -138,9 +180,10 @@ Now:
 
     return new StreamingTextResponse(stream);
   } catch (error) {
-    console.error("Gemini route error:", error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Chat route error:", errorMsg, error);
     return NextResponse.json(
-      { error: (error as Error).message },
+      { error: errorMsg },
       { status: 500 }
     );
   }

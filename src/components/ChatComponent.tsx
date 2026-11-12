@@ -7,6 +7,7 @@ import { Send, Loader2 } from 'lucide-react';
 import MessageList from './MessageList';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 type Props = {
     chatId: number
@@ -27,7 +28,11 @@ const ChatComponent = ({chatId}: Props) => {
         chatId
     },
     initialMessages: data || [],
-    streamProtocol: 'text'
+    streamProtocol: 'text',
+    onError: (err) => {
+        toast.error(err.message || "Failed to get AI response");
+        console.error("Chat error:", err);
+    }
    });
    
    // Debug: Log messages removed
