@@ -1,22 +1,24 @@
 import { put } from "@vercel/blob";
 import { auth } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-// Edge runtime: no 4.5MB body-size limit, handles large PDFs (up to 20MB)
-export const runtime = "edge";
+// Node.js runtime — process.env works reliably for server secrets
+// (Edge runtime does not reliably expose non-NEXT_PUBLIC env vars in Next.js)
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
     try {
         const { userId } = await auth();
 
         if (!userId) {
-            return Response.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // Explicit token check — surfaces missing env var immediately
-        if (!process.env.BLOB_READ_WRITE_TOKEN) {
-            console.error("BLOB_READ_WRITE_TOKEN is not set");
-            return Response.json(
-                { error: "Server misconfiguration: BLOB_READ_WRITE_TOKEN missing" },
+        const token = process.env.BLOB_READ_WRITE_TOKEN;
+        if (!token) {
+            console.error("BLOB_READ_WRITE_TOKEN is not configured");
+            return NextResponse.json(
+                { error: "Server misconfiguration: blob token missing" },
                 { status: 500 }
             );
         }
@@ -25,31 +27,32 @@ export async function POST(request: Request) {
         const file = formData.get("file") as File | null;
 
         if (!file) {
-            return Response.json({ error: "No file provided" }, { status: 400 });
+            return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
         if (file.type !== "application/pdf") {
-            return Response.json(
+            return NextResponse.json(
                 { error: "Only PDF files are allowed" },
                 { status: 400 }
             );
         }
 
         if (file.size > 20 * 1024 * 1024) {
-            return Response.json(
+            return NextResponse.json(
                 { error: "File size must be under 20 MB" },
                 { status: 400 }
             );
         }
 
-        // Upload directly to Vercel Blob — no client-token handshake needed
+        // Pass token explicitly — avoids SDK relying on process.env internally
         const blob = await put(`pdfs/${userId}/${file.name}`, file, {
             access: "public",
             addRandomSuffix: true,
             contentType: "application/pdf",
+            token,
         });
 
-        return Response.json({
+        return NextResponse.json({
             blob_url: blob.url,
             file_key: blob.pathname,
             file_name: file.name,
@@ -57,6 +60,6 @@ export async function POST(request: Request) {
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error("Blob upload error:", message, error);
-        return Response.json({ error: message }, { status: 500 });
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
